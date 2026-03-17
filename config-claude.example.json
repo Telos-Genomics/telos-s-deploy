@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "telos-s-mcp": {
+      "command": "/etc/profiles/per-user/TU_USUARIO/bin/npx",
+      "args": [
+        "-y",
+        "mcp-remote",
+        "http://localhost:8001/mcp"
+      ],
+      "env": {
+        "PATH": "/etc/profiles/per-user/TU_USUARIO/bin:/usr/local/bin:/usr/bin:/bin"
+      }
+    }
+  }
+}

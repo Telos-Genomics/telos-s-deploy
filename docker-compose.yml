@@ -1,0 +1,95 @@
+services:
+  # ---------------------------------------------------------------------------
+  # TELOS-S BACKEND — FastAPI + Pipeline de análisis genómico
+  # ---------------------------------------------------------------------------
+  telos-backend:
+    build:
+      context: ../backend # raíz del repo backend, revisar el nombre correcto
+      dockerfile: Dockerfile # Dockerfile en la raíz del repo backend
+    container_name: telos-backend
+    restart: unless-stopped
+    ports:
+      - "6002:8000"
+    volumes:
+      # Output compartido con MCP server (análisis, reportes, CSVs)
+      - telos_output:/app/output
+      # Cache del modelo ESM-2 (2.5GB) — persiste entre reinicios
+      - huggingface_cache:/root/.cache/huggingface
+      # Referencia Wuhan: descargada automáticamente en primer arranque
+      # y persistida para no volver a descargarla
+      - telos_reference:/app/data
+    environment:
+      - PYTHONUNBUFFERED=1
+      - TRANSFORMERS_CACHE=/root/.cache/huggingface
+      - HF_HOME=/root/.cache/huggingface
+      - API_HOST=0.0.0.0
+      - API_PORT=8000
+      - PUBLIC_URL=${PUBLIC_URL:-http://localhost:6002} # ← puerto del host, no del contenedor
+      - ESM_2_SIZE=facebook/esm2_t30_150M_UR50D
+    networks:
+      - telos-net
+
+  # ===========================================================================
+  # CORE: TELOS-S FRONTEND - Svelte 5 + Vite compilado, servido por Nginx
+  # ===========================================================================
+  telos-frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+      args:
+        # URL del backend — debe ser accesible desde el NAVEGADOR del usuario,
+        # no desde dentro de Docker. Usar localhost si es demo local.
+        VITE_API_URL: ${VITE_API_URL:-http://0.0.0.0:6002}
+        # Token de Mapbox para Telos-SIM (dejar vacío si no se usa el mapa)
+        VITE_MAPBOX_TOKEN: ${VITE_MAPBOX_TOKEN:-pk.eyJ1Ijoia3VyYWkwMjEiLCJhIjoiY2ptbTRnMWsxMDBkeTN2cXhlaWM2aXJ0OSJ9.KI3udYVSC-oXgNueokCw0g}
+    container_name: telos-frontend
+    restart: unless-stopped
+    ports:
+      - "6001:80"
+    networks:
+      - telos-net
+    depends_on:
+      - telos-backend
+
+  # ---------------------------------------------------------------------------
+  # TELOS-S MCP SERVER — Expone resultados de análisis a Ollama
+  # ---------------------------------------------------------------------------
+  telos-mcp:
+    build:
+      context: ./ # carpeta local junto al docker-compose
+      dockerfile: Dockerfile
+    container_name: telos-mcp
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    volumes:
+      - telos_output:/app/output:ro # solo lectura
+    environment:
+      - PYTHONUNBUFFERED=1
+      - TELOS_API_URL=http://telos-backend:6002
+      - MCP_PORT=8001
+    networks:
+      - telos-net
+    depends_on:
+      - telos-backend
+
+# =============================================================================
+# VOLÚMENES
+# =============================================================================
+volumes:
+  telos_output:
+    name: telos_s_output
+  telos_reference:
+    name: telos_s_reference # Spike Wuhan descargada automáticamente
+  huggingface_cache:
+    name: telos_s_hf_cache
+  ollama_models:
+    name: telos_s_ollama_models
+
+# =============================================================================
+# RED INTERNA
+# =============================================================================
+networks:
+  telos-net:
+    name: telos-network
+    driver: bridge

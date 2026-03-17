@@ -1,0 +1,183 @@
+# =============================================================================
+# TELOS-S — Docker Compose
+# Telos Genomics · Predictive Intelligence Engine for Protein Evolution
+# =============================================================================
+#
+# Estructura de carpetas esperada en el host:
+#
+#   telos-s/                        ← carpeta raíz de trabajo (cualquier nombre)
+#   ├── docker-compose.yml          ← este archivo
+#   ├── telos-s-backend/            ← git clone del repo backend
+#   │   ├── backend.py
+#   │   ├── requirements.txt
+#   │   ├── modules/
+#   │   └── data/
+#   │       └── spike_wuhan.txt     ← REQUERIDO (no está en el repo, agregar manualmente)
+#   └── mcp_server/                 ← esta carpeta viene con este docker-compose
+#       ├── mcp_server.py
+#       ├── requirements.txt
+#       └── Dockerfile
+#
+# Setup inicial:
+#   mkdir telos-s && cd telos-s
+#   git clone https://github.com/tu-usuario/telos-s-backend
+#   mkdir -p telos-s-backend/data
+#   cp /ruta/a/spike_wuhan.txt telos-s-backend/data/
+#   docker compose up -d ollama
+#   docker compose exec ollama ollama pull llama3.1:8b
+#   docker compose up -d
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # TELOS-S BACKEND — FastAPI + Pipeline de análisis genómico
+  # ---------------------------------------------------------------------------
+  telos-backend:
+    build:
+      context: ../backend # raíz del repo backend, revisar el nombre correcto
+      dockerfile: Dockerfile # Dockerfile en la raíz del repo backend
+    container_name: telos-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      # Output compartido con MCP server (análisis, reportes, CSVs)
+      - telos_output:/app/output
+      # Cache del modelo ESM-2 (2.5GB) — persiste entre reinicios
+      - huggingface_cache:/root/.cache/huggingface
+      # Referencia Wuhan: descargada automáticamente en primer arranque
+      # y persistida para no volver a descargarla
+      - telos_reference:/app/data
+    environment:
+      - PYTHONUNBUFFERED=1
+      - TRANSFORMERS_CACHE=/root/.cache/huggingface
+      - HF_HOME=/root/.cache/huggingface
+      - TELOS_FORCE_CPU=true
+    networks:
+      - telos-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # ===========================================================================
+  # CORE: TELOS-S FRONTEND - Svelte 5 + Vite compilado, servido por Nginx
+  # ===========================================================================
+  telos-frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+      args:
+        # URL del backend — debe ser accesible desde el NAVEGADOR del usuario,
+        # no desde dentro de Docker. Usar localhost si es demo local.
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
+        # Token de Mapbox para Telos-SIM (dejar vacío si no se usa el mapa)
+        VITE_MAPBOX_TOKEN: ${VITE_MAPBOX_TOKEN:-}
+    container_name: telos-frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-80}:80"
+    networks:
+      - telos-net
+    depends_on:
+      telos-backend:
+        condition: service_healthy
+
+  # ---------------------------------------------------------------------------
+  # TELOS-S MCP SERVER — Expone resultados de análisis a Ollama
+  # ---------------------------------------------------------------------------
+  telos-mcp:
+    build:
+      context: ./ # carpeta local junto al docker-compose
+      dockerfile: Dockerfile
+    container_name: telos-mcp
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    volumes:
+      - telos_output:/app/output:ro # solo lectura
+    environment:
+      - PYTHONUNBUFFERED=1
+      - TELOS_API_URL=http://telos-backend:8000
+      - MCP_PORT=8001
+    networks:
+      - telos-net
+    depends_on:
+      telos-backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  # ---------------------------------------------------------------------------
+  # OLLAMA — LLM local (llama3.1:8b recomendado para análisis)
+  # ---------------------------------------------------------------------------
+  ollama:
+    image: ollama/ollama:latest
+    container_name: telos-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_models:/root/.ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+    networks:
+      - telos-net
+    # En Apple Silicon con OrbStack, Ollama usa Metal nativo.
+    # En Linux con NVIDIA GPU, descomentar:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
+  # ---------------------------------------------------------------------------
+  # OPEN WEBUI — Interfaz conversacional sobre los resultados de Telos-S
+  # ---------------------------------------------------------------------------
+  openwebui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: telos-openwebui
+    restart: unless-stopped
+    ports:
+      - "3000:8080"
+    volumes:
+      - openwebui_data:/app/backend/data
+    environment:
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - WEBUI_AUTH=false
+      - WEBUI_NAME=Telos-S Intelligence
+    networks:
+      - telos-net
+    depends_on:
+      - ollama
+      - telos-mcp
+
+# =============================================================================
+# VOLÚMENES
+# =============================================================================
+volumes:
+  telos_output:
+    name: telos_s_output
+  telos_reference:
+    name: telos_s_reference # Spike Wuhan descargada automáticamente
+  huggingface_cache:
+    name: telos_s_hf_cache
+  ollama_models:
+    name: telos_s_ollama_models
+  openwebui_data:
+    name: telos_s_openwebui
+
+# =============================================================================
+# RED INTERNA
+# =============================================================================
+networks:
+  telos-net:
+    name: telos-network
+    driver: bridge
