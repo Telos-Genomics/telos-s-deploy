@@ -192,9 +192,9 @@ def load_job(job_id: str) -> dict:
         return json.load(f)
  
  
-def load_prophet_data(variant_name: str) -> Optional[list]:
+def load_prophet_data(job_id: str, variant_name: str) -> Optional[list]:
     """Carga las predicciones Prophet para una variante."""
-    prophet_path = OUTPUT_DIR / "prophet" / f"mutation_predictions_spike_{variant_name}.json"
+    prophet_path = OUTPUT_DIR / "prophet" / f"mutation_predictions_spike_{job_id}_{variant_name}.json"
     if prophet_path.exists():
         with open(prophet_path) as f:
             return json.load(f)
@@ -266,7 +266,7 @@ def tool_get_analysis_results(job_id: str) -> dict:
  
     results = job.get("results", {})
     variant_name = results.get("variant_name", "Unknown")
-    prophet_data = load_prophet_data(variant_name)
+    prophet_data = load_prophet_data(job_id, variant_name)
  
     return {
         "job_id": job_id,
@@ -332,7 +332,7 @@ def tool_get_variant_summary(job_id: str) -> dict:
     quality = results.get("sequence_quality", 0)
     epi = results.get("epi_params", {})
     mutations = results.get("mutations", [])
-    prophet_data = load_prophet_data(variant_name)
+    prophet_data = load_prophet_data(job_id, variant_name)
  
     # Top mutations por score
     reliable_muts = [m for m in mutations if m.get("confidence") == "CONFIABLE"]
@@ -461,7 +461,7 @@ def tool_get_prophet_predictions(job_id: str) -> dict:
     job = load_job(job_id)
     results = job.get("results", {})
     variant_name = results.get("variant_name", "Unknown")
-    prophet_data = load_prophet_data(variant_name)
+    prophet_data = load_prophet_data(job_id, variant_name)
  
     if not prophet_data:
         return {
