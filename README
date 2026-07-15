@@ -1,5 +1,7 @@
 # Telos-S · Deploy
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21381037.svg)](https://doi.org/10.5281/zenodo.21381037)
+
 ### Powered by Telos Genomics
 
 Docker Compose orchestration for the full **Telos-S** stack: the genomic analysis backend, the frontend, an MCP (Model Context Protocol) server, and, optionally, a local LLM stack (Ollama + OpenWebUI) for exploring results conversationally.

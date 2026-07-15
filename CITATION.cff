@@ -1,0 +1,36 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite both the software and the associated preprint as below."
+title: "Telos-S Deployment Orchestration"
+abstract: >-
+  Docker Compose orchestration for the Telos-S platform, including the
+  backend, frontend, and a Model Context Protocol (MCP) server exposing
+  genomic analysis results to LLM-based tooling.
+authors:
+  - family-names: "Armuelles Zeballos"
+    given-names: "Richard Alexander"
+    affiliation: "Telos Genomics"
+version: 0.1.0
+date-released: "2026-07-15"
+doi: 10.5281/zenodo.21381037
+url: "https://github.com/Telos-Genomics/telos-s-deploy"
+repository-code: "https://github.com/Telos-Genomics/telos-s-deploy"
+license: MIT
+keywords:
+  - SARS-CoV-2
+  - genomic surveillance
+  - deployment
+  - MCP server
+  - bioinformatics
+identifiers:
+  - type: doi
+    value: 10.5281/zenodo.21381037
+    description: "Archived snapshot of this software version on Zenodo"
+preferred-citation:
+  type: article
+  title: "Lineage-Independent Structural Risk Detection in SARS-CoV-2 Spike Protein via Zero-Shot Protein Language Modeling"
+  authors:
+    - family-names: "Armuelles Zeballos"
+      given-names: "Richard Alexander"
+      affiliation: "Telos Genomics"
+  doi: 10.5281/zenodo.21381359
+  year: 2026
