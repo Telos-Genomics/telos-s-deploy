@@ -341,7 +341,7 @@ def tool_get_variant_summary(job_id: str) -> dict:
         for m in top_muts
     ]) or "  No reliable mutations detected"
 
-    # lineage_confidence: convertir a float con fallback seguro
+    # lineage_confidence: Convert to float with a safe fallback
     try:
         lineage_conf = float(lineage_conf or 0)
     except (TypeError, ValueError):
@@ -638,7 +638,7 @@ async def mcp_endpoint(request: Request):
                 "error": {"code": -32000, "message": str(e)}
             })
  
-    # --- Método no reconocido ---
+    # --- Unrecognized method ---
     else:
         return _JSONResponse({
             "jsonrpc": "2.0",
