@@ -6,39 +6,12 @@
 __pycache__/
 *.py[cod]
 *$py.class
+.venv/
 venv/
 env/
 .env
-.venv
 pip-log.txt
 setup.cfg
-
-# --- Modelos de IA (¡Muy importante!) ---
-# No queremos subir los 2.5GB del modelo ESM-2 650M a GitHub
-models/
-*.pt
-*.pth
-*.bin
-.cache/
-huggingface/
-
-# --- Datos de Entrada (FASTA/Genomas) ---
-# Evita subir secuencias crudas que pueden ser pesadas o privadas
-data/raw/
-*.fasta
-*.fna
-*.fastq
-*.gb
-
-# --- Resultados y Reportes ---
-# Es mejor que cada usuario genere sus propios reportes
-output/
-results/
-reportes/
-*.csv
-*.png
-*.pdf
-informe_ejecutivo_*.txt
 
 # --- Logs y Temporales ---
 *.log

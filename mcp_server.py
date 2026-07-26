@@ -326,20 +326,26 @@ def tool_get_variant_summary(job_id: str) -> dict:
     variant_name = results.get("variant_name", "Unknown")
     score = get_aggression_score(results)
     lineage = results.get("lineage", "Unknown")
-    lineage_conf = results.get("lineage_confidence", "0")
+    lineage_conf = results.get("lineage_confidence", 0)
     quality = results.get("sequence_quality", 0)
     epi = results.get("epi_params", {})
     mutations = results.get("mutations", [])
     prophet_data = load_prophet_data(job_id, variant_name)
  
     # Top mutations by score
-    reliable_muts = {m["Mutation"] for m in mutations if m.get("Reliability") == "RELIABLE"}
+    reliable_muts = [m for m in mutations if m.get("Reliability") == "RELIABLE"]
     top_muts = sorted(reliable_muts, key=lambda m: abs(m.get("Score", 0)), reverse=True)[:5]
  
     top_muts_text = "\n".join([
-        f"  {m['Mutation']} — zone: {m['Zone']}, score: {m['Score']:.1f}"
+        f"  {m['Mutation']} — zone: {m['Context']}, score: {m['Score']}"
         for m in top_muts
     ]) or "  No reliable mutations detected"
+
+    # lineage_confidence: convertir a float con fallback seguro
+    try:
+        lineage_conf = float(lineage_conf or 0)
+    except (TypeError, ValueError):
+        lineage_conf = 0.0
  
     prophet_text = format_prophet_for_llm(prophet_data) if prophet_data else "  Not available"
  
