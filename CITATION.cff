@@ -11,7 +11,7 @@ authors:
     affiliation: "Telos Genomics"
 version: 0.1.0
 date-released: "2026-07-15"
-doi: 10.5281/zenodo.21381037
+doi: 10.5281/zenodo.21381036
 url: "https://github.com/Telos-Genomics/telos-s-deploy"
 repository-code: "https://github.com/Telos-Genomics/telos-s-deploy"
 license: MIT
@@ -23,7 +23,7 @@ keywords:
   - bioinformatics
 identifiers:
   - type: doi
-    value: 10.5281/zenodo.21381037
+    value: 10.5281/zenodo.21381036
     description: "Archived snapshot of this software version on Zenodo"
 preferred-citation:
   type: article
@@ -32,5 +32,5 @@ preferred-citation:
     - family-names: "Armuelles Zeballos"
       given-names: "Richard Alexander"
       affiliation: "Telos Genomics"
-  doi: 10.5281/zenodo.21381359
+  doi: 10.5281/zenodo.21381358
   year: 2026

@@ -1,6 +1,6 @@
 # Telos-S · Deploy
 
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21381037.svg)](https://doi.org/10.5281/zenodo.21381037)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21381036.svg)](https://doi.org/10.5281/zenodo.21381036)
 
 ### Powered by Telos Genomics
 
