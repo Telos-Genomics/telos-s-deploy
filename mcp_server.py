@@ -1,24 +1,22 @@
 """
 Telos-S MCP Server
 ------------------
-Model Context Protocol server que expone los resultados del pipeline de
-Telos-S a modelos de lenguaje locales (Ollama) vía OpenWebUI.
- 
-Implementa el protocolo MCP sobre HTTP/SSE, compatible con OpenWebUI >= 0.5
-y con cualquier cliente MCP estándar.
- 
-Tools expuestas:
-    - get_analysis_results      → Resultados completos de un análisis por job_id
-    - list_recent_analyses      → Lista los N análisis más recientes
-    - get_variant_summary       → Resumen ejecutivo en lenguaje natural listo para LLM
-    - compare_variants          → Comparación entre dos análisis
-    - get_prophet_predictions   → Solo las predicciones de evolución futura
- 
-Uso standalone (sin Docker):
+A Model Context Protocol server that exposes the results of the Telos-S pipeline to local language models (Ollama) via OpenWebUI.
+
+It implements the MCP protocol over HTTP/SSE, compatible with OpenWebUI >= 0.5 and any standard MCP client.
+
+Available tools:
+    - get_analysis_results → Complete results for a specific analysis by job_id
+    - list_recent_analyses → Lists the N most recent analyses
+    - get_variant_summary → An executive summary in natural language, ready for LLMs
+    - compare_variants → Comparison between two analyses
+    - get_prophet_predictions → Only future evolution predictions
+
+Standalone usage (without Docker):
     pip install fastapi uvicorn sse-starlette
     python mcp_server.py
  
-Puerto por defecto: 8001
+Default port: 8001
 """
  
 import json
@@ -36,7 +34,7 @@ from sse_starlette.sse import EventSourceResponse
 import uvicorn
  
 # =============================================================================
-# CONFIGURACIÓN
+# CONFIGURATION
 # =============================================================================
  
 OUTPUT_DIR = Path(os.getenv("TELOS_OUTPUT_DIR", "/app/output"))
@@ -46,7 +44,7 @@ MCP_PORT = int(os.getenv("MCP_PORT", "8001"))
 # Información del servidor MCP
 SERVER_INFO = {
     "name": "telos-s-mcp",
-    "version": "1.0.0",
+    "version": "0.1.1",
     "description": "Telos-S genomic intelligence — SARS-CoV-2 variant analysis tools",
     "vendor": "Telos Genomics",
 }
@@ -169,7 +167,7 @@ TOOLS = [
 app = FastAPI(
     title="Telos-S MCP Server",
     description="MCP server for Telos-S genomic intelligence",
-    version="1.0.0"
+    version="0.1.1"
 )
  
 app.add_middleware(
@@ -180,11 +178,11 @@ app.add_middleware(
 )
  
 # =============================================================================
-# HELPERS — Lectura de datos del pipeline
+# Load the JSON status of a job.
 # =============================================================================
  
 def load_job(job_id: str) -> dict:
-    """Carga el JSON de estado de un job."""
+    """Load the JSON status of a job."""
     job_file = JOBS_DIR / f"{job_id}.json"
     if not job_file.exists():
         raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found")
@@ -193,7 +191,7 @@ def load_job(job_id: str) -> dict:
  
  
 def load_prophet_data(job_id: str, variant_name: str) -> Optional[list]:
-    """Carga las predicciones Prophet para una variante."""
+    """Load the Prophet predictions for a specific variant."""
     prophet_path = OUTPUT_DIR / "prophet" / f"mutation_predictions_spike_{job_id}_{variant_name}.json"
     if prophet_path.exists():
         with open(prophet_path) as f:
@@ -212,9 +210,9 @@ def score_to_risk_label(score: float) -> str:
  
 def get_aggression_score(results: dict) -> float:
     """
-    Lee aggression_score de donde esté disponible.
-    Jobs nuevos: results["aggression_score"] (promovido a raíz por el backend)
-    Jobs viejos: results["epi_params"]["aggression_score"]
+    Read the `aggression_score` from wherever it is available.
+    New jobs: results["aggression_score"] (promoted by the backend)
+    Old jobs: results["epi_params"]["aggression_score"]
     """
     score = results.get("aggression_score")
     if score is None or score == 0:
@@ -223,15 +221,15 @@ def get_aggression_score(results: dict) -> float:
  
  
 def format_prophet_for_llm(prophet_data: list) -> str:
-    """Convierte predicciones Prophet a texto estructurado para el LLM."""
+    """Convert Prophet predictions into structured text for use with large language models (LLMs)."""
     if not prophet_data:
         return "No Prophet predictions available."
  
     lines = []
     for target in prophet_data:
-        pos = target.get("detected_position")
-        original = target.get("original", "?")
-        name = target.get("target", f"Position {pos}")
+        pos = target.get("wuhan_position")
+        original = target.get("original_aa", "?")
+        name = target.get("target_site", f"Position {pos}")
         predictions = target.get("predictions", [])
  
         top_candidates = [p for p in predictions if p.get("amino") != original]
@@ -251,7 +249,7 @@ def format_prophet_for_llm(prophet_data: list) -> str:
  
  
 # =============================================================================
-# IMPLEMENTACIÓN DE TOOLS
+# TOOLS IMPLEMENTATION
 # =============================================================================
  
 def tool_get_analysis_results(job_id: str) -> dict:
@@ -289,7 +287,7 @@ def tool_list_recent_analyses(limit: int = 10, status_filter: str = "completed")
     job_files = sorted(JOBS_DIR.glob("*.json"), key=lambda f: f.stat().st_mtime, reverse=True)
     results = []
  
-    for job_file in job_files[:100]:  # Leer hasta 100 para filtrar
+    for job_file in job_files[:100]:  # Read up to 100 characters to filter
         if len(results) >= limit:
             break
         try:
@@ -334,60 +332,66 @@ def tool_get_variant_summary(job_id: str) -> dict:
     mutations = results.get("mutations", [])
     prophet_data = load_prophet_data(job_id, variant_name)
  
-    # Top mutations por score
-    reliable_muts = [m for m in mutations if m.get("confidence") == "CONFIABLE"]
-    top_muts = sorted(reliable_muts, key=lambda m: abs(m.get("score", 0)), reverse=True)[:5]
+    # Top mutations by score
+    reliable_muts = [m for m in mutations if m.get("Reliability") == "RELIABLE"]
+    top_muts = sorted(reliable_muts, key=lambda m: abs(m.get("Score", 0)), reverse=True)[:5]
  
     top_muts_text = "\n".join([
-        f"  {m['mutation']} — zone: {m['zone']}, score: {m['score']:.1f}"
+        f"  {m['Mutation']} — zone: {m['Context']}, score: {m['Score']}"
         for m in top_muts
     ]) or "  No reliable mutations detected"
+
+    # lineage_confidence: Convert to float with a safe fallback
+    try:
+        lineage_conf = float(lineage_conf or 0)
+    except (TypeError, ValueError):
+        lineage_conf = 0.0
  
     prophet_text = format_prophet_for_llm(prophet_data) if prophet_data else "  Not available"
  
-    # Construir el summary como texto estructurado
+    # Creating a summary as structured text
     summary_text = f"""
-TELOS-S VARIANT INTELLIGENCE REPORT
-=====================================
-Variant: {variant_name}
-Probable Lineage: {lineage} ({lineage_conf:.0f}% match)
-Sequencing Quality: {quality:.1f}%
+    TELOS-S VARIANT INTELLIGENCE REPORT
+    =====================================
+    Variant: {variant_name}
+    Probable Lineage: {lineage} ({lineage_conf}% match)
+    Sequencing Quality: {quality:.1f}%
  
-RISK ASSESSMENT
----------------
-Aggression Score: {score:.1f}
-Risk Level: {score_to_risk_label(score)}
+    RISK ASSESSMENT
+    ---------------
+    Aggression Score: {score:.1f}
+    Risk Level: {score_to_risk_label(score)}
  
-Interpretation:
-- Scores > 1200 indicate high immune evasion potential (comparable to Omicron BA.1/BA.2 emergence)
-- Scores 600–1200 indicate an active variant of interest requiring monitoring
-- Scores < 600 indicate moderate mutational burden
+    Interpretation:
+    - Scores > 1200 indicate high immune evasion potential (comparable to Omicron BA.1/BA.2 emergence)
+    - Scores 600–1200 indicate an active variant of interest requiring monitoring
+    - Scores < 600 indicate moderate mutational burden
  
-EPIDEMIOLOGICAL PARAMETERS (ESM-2 derived)
-------------------------------------------
-Estimated R0: {epi.get('r0_estimated', 'N/A')}
-Incubation period: {epi.get('incubation_period_days', 'N/A')} days
-Base transmissibility: {epi.get('transmissibility_base', 'N/A')}
+    EPIDEMIOLOGICAL PARAMETERS (ESM-2 derived)
+    ------------------------------------------
+    Estimated R0: {epi.get('r0_estimated', 'N/A')}
+    Incubation period: {epi.get('incubation_period_days', 'N/A')} days
+    Base transmissibility: {epi.get('transmissibility_base', 'N/A')}
  
-Note: These parameters are derived computationally from protein structural 
-stability analysis and should be validated with epidemiological field data.
+    Note: These parameters are derived computationally from protein structural 
+    stability analysis and should be validated with epidemiological field data.
  
-TOP 5 CRITICAL MUTATIONS (reliable positions only)
----------------------------------------------------
-{top_muts_text}
+    TOP 5 CRITICAL MUTATIONS (reliable positions only)
+    ---------------------------------------------------
+    {top_muts_text}
  
-TELOS PROPHET — FUTURE EVOLUTION PREDICTIONS
-(ESM-2 structural stability at 4 key positions)
----------------------------------------------------
-{prophet_text}
+    TELOS PROPHET — FUTURE EVOLUTION PREDICTIONS
+    (ESM-2 structural stability at 4 key positions)
+    ---------------------------------------------------
+    {prophet_text}
  
-METHODOLOGY NOTE
-----------------
-Analysis performed with ESM-2 650M (Meta AI) protein language model.
-Mutations near sequencing gaps (X positions ±5 residues) are excluded
-from risk scoring to prevent artifact-driven false positives.
-Data source: Confirmed sequencing only. Imputed positions flagged.
-""".strip()
+    METHODOLOGY NOTE
+    ----------------
+    Analysis performed with ESM-2 650M (Meta AI) protein language model.
+    Mutations near sequencing gaps (X positions ±5 residues) are excluded
+    from risk scoring to prevent artifact-driven false positives.
+    Data source: Confirmed sequencing only. Imputed positions flagged.
+    """.strip()
  
     return {
         "job_id": job_id,
@@ -420,9 +424,9 @@ def tool_compare_variants(job_id_a: str, job_id_b: str) -> dict:
     epi_a = res_a.get("epi_params", {})
     epi_b = res_b.get("epi_params", {})
  
-    # Mutaciones únicas en cada variante
-    muts_a = {m["mutation"] for m in res_a.get("mutations", []) if m.get("confidence") == "CONFIABLE"}
-    muts_b = {m["mutation"] for m in res_b.get("mutations", []) if m.get("confidence") == "CONFIABLE"}
+    # Unique mutations in each variant
+    muts_a = {m["Mutation"] for m in res_a.get("mutations", []) if m.get("Reliability") == "RELIABLE"}
+    muts_b = {m["Mutation"] for m in res_b.get("mutations", []) if m.get("Reliability") == "RELIABLE"}
     shared = muts_a & muts_b
     unique_to_a = muts_a - muts_b
     unique_to_b = muts_b - muts_a
@@ -481,7 +485,7 @@ def tool_get_prophet_predictions(job_id: str) -> dict:
  
  
 # =============================================================================
-# DISPATCHER DE TOOLS
+# TOOLS DISPATCHER
 # =============================================================================
  
 TOOL_HANDLERS = {
@@ -493,16 +497,16 @@ TOOL_HANDLERS = {
 }
  
 # =============================================================================
-# GESTIÓN DE SESIONES MCP (Streamable HTTP — spec 2025-03-26)
-# OpenWebUI envía Mcp-Session-Id en cada request después del initialize.
-# Mantenemos un set de sesiones activas para validarlas.
-# Para uso local en memoria es suficiente; para producción usar Redis.
+# MCP Session Management (Streamable HTTP – spec 2025-03-26)
+# OpenWebUI sends the Mcp-Session-Id in each request after initialization.
+# We maintain a set of active sessions for validation purposes.
+# For local use in memory, this is sufficient; for production, use Redis.
 # =============================================================================
 _active_sessions: set = set()
  
  
 # =============================================================================
-# ENDPOINTS MCP (protocolo JSON-RPC sobre HTTP)
+# MCP ENDPOINTS (JSON-RPC protocol over HTTP)
 # =============================================================================
  
 @app.get("/health")
@@ -530,12 +534,12 @@ async def root():
 @app.post("/mcp")
 async def mcp_endpoint(request: Request):
     """
-    Endpoint principal MCP — Streamable HTTP (spec 2025-03-26).
- 
-    Gestión de sesiones:
-      - initialize:  crea sesión, devuelve Mcp-Session-Id en el header de respuesta
-      - resto:       valida Mcp-Session-Id del header entrante
-      - OpenWebUI envía el session ID en cada request tras el handshake inicial
+    Main endpoint MCP – Streamable HTTP (spec 2025-03-26).
+
+    Session management:
+      - initialize: creates a session, returns the Mcp-Session-Id in the response header
+      - subsequent requests: validates the Mcp-Session-Id from the incoming header
+      - OpenWebUI sends the session ID with each request after the initial handshake
     """
     from fastapi.responses import JSONResponse as _JSONResponse
  
@@ -548,7 +552,7 @@ async def mcp_endpoint(request: Request):
     params = body.get("params", {})
     request_id = body.get("id", 1)
  
-    # Guard: request sin method
+    # Guard: Request without a 'method' parameter
     if not method:
         return _JSONResponse({
             "jsonrpc": "2.0",
@@ -559,7 +563,7 @@ async def mcp_endpoint(request: Request):
             }
         })
  
-    # --- initialize — crear sesión nueva ---
+    # --- initialize — create a new session ---
     if method == "initialize":
         session_id = uuid.uuid4().hex
         _active_sessions.add(session_id)
@@ -573,22 +577,22 @@ async def mcp_endpoint(request: Request):
                 "serverInfo": SERVER_INFO
             }
         }
-        # Devolver session ID en header — OpenWebUI lo reutiliza en requests siguientes
+        # Return the session ID in the header – OpenWebUI reuses it in subsequent requests.
         return _JSONResponse(
             content=response_body,
             headers={"Mcp-Session-Id": session_id}
         )
  
-    # --- Para todos los demás métodos: sesión opcional ---
-    # Si viene Mcp-Session-Id pero no está en memoria (ej: contenedor reiniciado),
-    # lo aceptamos igual en lugar de rechazar con 404.
-    # OpenWebUI no maneja el 404 de sesión correctamente y se queda cargando.
+    # --- For all other methods: Optional session ---
+    # If "Mcp-Session-Id" is provided, but it's not in memory (e.g., container restarted),
+    # we accept it anyway instead of rejecting with a 404 error.
+    # OpenWebUI doesn't handle the 404 session error correctly and gets stuck loading.
     incoming_session = request.headers.get("Mcp-Session-Id")
     if incoming_session and incoming_session not in _active_sessions:
-        # Re-registrar la sesión en lugar de rechazarla
+        # Instead of rejecting the session, re-register it
         _active_sessions.add(incoming_session)
  
-    # --- notifications/initialized — ACK del cliente, no requiere respuesta ---
+    # --- notifications/initialized — Client acknowledgment, does not require a response ---
     if method == "notifications/initialized":
         return _JSONResponse(content={}, status_code=200)
  
@@ -634,7 +638,7 @@ async def mcp_endpoint(request: Request):
                 "error": {"code": -32000, "message": str(e)}
             })
  
-    # --- Método no reconocido ---
+    # --- Unrecognized method ---
     else:
         return _JSONResponse({
             "jsonrpc": "2.0",
@@ -646,8 +650,8 @@ async def mcp_endpoint(request: Request):
 @app.delete("/mcp")
 async def mcp_session_terminate(request: Request):
     """
-    Termina una sesión MCP explícitamente.
-    OpenWebUI envía DELETE /mcp con Mcp-Session-Id al cerrar el chat.
+    Explicitly ends an MCP session.
+    When the chat is closed, OpenWebUI sends a DELETE /mcp request with the Mcp-Session-Id.
     """
     session_id = request.headers.get("Mcp-Session-Id")
     if session_id and session_id in _active_sessions:
@@ -658,10 +662,10 @@ async def mcp_session_terminate(request: Request):
 @app.get("/mcp")
 async def mcp_get(request: Request):
     """
-    GET /mcp — canal SSE servidor→cliente (MCP Streamable HTTP spec).
-    OpenWebUI lo abre después del initialize para recibir notificaciones
-    proactivas del servidor. Lo mantenemos vivo con keepalives periódicos.
-    Sin este endpoint el cliente recibe 405 y la sesión queda inconsistente.
+    GET /mcp — MCP streamable HTTP specification (server→client channel).
+    OpenWebUI opens this after initialization to receive proactive notifications from the server. 
+    We maintain it active with periodic keep-alive requests.
+    Without this endpoint, the client receives a 405 error and the session becomes inconsistent.
     """
     import asyncio
  
@@ -672,8 +676,8 @@ async def mcp_get(request: Request):
     async def server_events():
         try:
             while True:
-                # Keepalive cada 15s — evita que proxies y load balancers
-                # cierren la conexión por inactividad
+                # Send a "keep-alive" message every 15 seconds to prevent proxies and 
+                # load balancers from closing the connection due to inactivity.
                 await asyncio.sleep(15)
                 yield {
                     "event": "ping",
@@ -688,21 +692,21 @@ async def mcp_get(request: Request):
 @app.get("/mcp/sse")
 async def mcp_sse(request: Request):
     """
-    Endpoint SSE bidireccional para clientes MCP legacy (protocolo pre-2025).
-    Compatibilidad con Claude Desktop y otros clientes que usen SSE transport.
- 
-    Flujo:
-      1. Cliente GET /mcp/sse → servidor envía evento "endpoint" con la URL de mensajes
-      2. Cliente POST a esa URL con requests JSON-RPC
-      3. Servidor responde via SSE con los resultados
+    Bidirectional SSE endpoint for legacy MCP clients (pre-2025 protocol).
+    Compatibility with Claude Desktop and other clients that use SSE transport.
+
+    Flow:
+        1. Client GET /mcp/sse → Server sends "endpoint" event with the message URL
+        2. Client POST to that URL with JSON-RPC requests
+        3. Server responds via SSE with the results
     """
     import asyncio
  
     session_id = uuid.uuid4().hex[:12]
     messages_url = f"/mcp/sse/messages/{session_id}"
  
-    # Almacén temporal de respuestas para esta sesión
-    # (en producción usar Redis; para uso local un dict en memoria es suficiente)
+    # Temporary storage for responses for this session
+    # (In production, use Redis; for local use, a dictionary in memory is sufficient)
     if not hasattr(app.state, "sse_sessions"):
         app.state.sse_sessions = {}
     
@@ -710,13 +714,13 @@ async def mcp_sse(request: Request):
     app.state.sse_sessions[session_id] = queue
  
     async def event_generator():
-        # 1. Anunciar la URL donde el cliente debe enviar sus mensajes
+        # 1. Announce the URL where the client should send their messages.
         yield {
             "event": "endpoint",
             "data": messages_url
         }
  
-        # 2. Mantener la conexión abierta y retransmitir respuestas
+        # 2. Maintain an open line of communication and relay responses.
         try:
             while True:
                 try:
@@ -726,7 +730,7 @@ async def mcp_sse(request: Request):
                         "data": json.dumps(message)
                     }
                 except asyncio.TimeoutError:
-                    # Keepalive para evitar que el proxy cierre la conexión
+                    # A mechanism to prevent the proxy from disconnecting the connection.
                     yield {
                         "event": "ping",
                         "data": "{}"
@@ -742,8 +746,8 @@ async def mcp_sse(request: Request):
 @app.post("/mcp/sse/messages/{session_id}")
 async def mcp_sse_message(session_id: str, request: Request):
     """
-    Recibe mensajes JSON-RPC del cliente SSE y los procesa,
-    enviando la respuesta de vuelta por la conexión SSE abierta.
+    Receive JSON-RPC messages from the client using SSE and process them, 
+    sending the response back over the open SSE connection.
     """
     if not hasattr(app.state, "sse_sessions") or session_id not in app.state.sse_sessions:
         raise HTTPException(status_code=404, detail=f"SSE session '{session_id}' not found")
@@ -753,12 +757,12 @@ async def mcp_sse_message(session_id: str, request: Request):
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid JSON body")
  
-    # Reusar el dispatcher principal
+    # Reusing the main dispatcher
     method = body.get("method")
     params = body.get("params", {})
     request_id = body.get("id", 1)
  
-    # Procesar igual que el endpoint POST /mcp
+    # Process it in the same way as the POST /mcp endpoint.
     fake_request = type("R", (), {"json": lambda self: body})()
     
     if method == "initialize":
@@ -787,7 +791,7 @@ async def mcp_sse_message(session_id: str, request: Request):
         response = {"jsonrpc": "2.0", "id": request_id,
                    "error": {"code": -32601, "message": f"Method '{method}' not found"}}
  
-    # Enviar respuesta por la cola SSE
+    # Send response via the SSE queue
     queue = app.state.sse_sessions[session_id]
     await queue.put(response)
  

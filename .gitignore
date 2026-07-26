@@ -1,0 +1,26 @@
+# ==========================================
+# TELOS-S: Official .gitignore
+# ==========================================
+
+# --- Python & Entorno ---
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+.env
+pip-log.txt
+setup.cfg
+
+# --- Logs y Temporales ---
+*.log
+tmp/
+temp/
+.DS_Store (específico para tu Mac)
+Thumbs.db
+
+# --- Configuración de IDEs ---
+.vscode/
+.idea/
+*.swp
