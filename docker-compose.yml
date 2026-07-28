@@ -26,6 +26,7 @@ services:
       - API_PORT=8000
       - PUBLIC_URL=${PUBLIC_URL:-http://localhost:6002} # ← Host port, not the container port
       - ESM_2_SIZE=facebook/esm2_t33_650M_UR50D
+      - BATCH_SIZE=8
     networks:
       - telos-net
 
